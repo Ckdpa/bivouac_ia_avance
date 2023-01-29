@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from PIL import Image
 import numpy as np
 
-random.seed(5)
+random.seed(42)
 
 class LabelDataset(Dataset):
     def __init__(self, filename_list, mask_as_int, transform = None):
@@ -71,7 +71,7 @@ def get_weights(data):
     samples_weights = weight[arr]                                   
     return samples_weights  
     
-def getOverSampler(data, mask_as_int = True,batch_size=16, remove_zeros = True, transform = None):
+def getOverSampler(data, mask_as_int = True,batch_size=16, transform = None):
     if transform == None:
         transform = transforms.Compose([
             transforms.RandomRotation(90, fill=250),
@@ -87,8 +87,7 @@ def getOverSampler(data, mask_as_int = True,batch_size=16, remove_zeros = True, 
         transform = transforms
 
     dataset = LabelDataset(data, mask_as_int, transform=transform)
-    if remove_zeros:
-        dataset.remove_zeros(0.90)
+    dataset.remove_zeros(0.80)
     # Compute the class weights
     samples_weights = get_weights(dataset)
     
@@ -104,7 +103,7 @@ def getOverSampler(data, mask_as_int = True,batch_size=16, remove_zeros = True, 
         sampler=sampler,
         batch_size=batch_size,
         drop_last=True,
-        num_workers=16)
+	num_workers = 16)
 
     return dataloader
 
@@ -113,31 +112,29 @@ def forward_dataset(model, dataloader, training):
     correct = 0
     total = 0
     # Compute all the steps
-    for _, (data, target) in enumerate(dataloader):
+    for data, target in (dataloader):
         data, target = data.to(device), target.long().to(device)
-        total += target.size(0)
+        outputs = model(data)
         if training:
             optimizer.zero_grad()
-        outputs = model(data)
-        loss = criterion(outputs, target.long())
-        if training:
+            loss = criterion(outputs, target.long())
             loss.backward()
             optimizer.step()
+        else:
+            loss = criterion(outputs, target.long())
         running_loss += loss.item()
         _,pred = torch.max(outputs, dim=1)
         correct += torch.sum(pred==target).item()
-    if total == 0:
-        print('ERROR total target is 0')
+        total += target.size(0)
     accuracy = correct/total
     return accuracy, running_loss/len(dataloader)
 
 train_files, test_files, val_files = train_test_val_split_list(list_data_files('./process_image_output_1024/'))
-print("Found files of size (train, test, val):", len(train_files), len(test_files), len(val_files)) 
 
 mask_as_int = True
-batch_size = 64*4 # Multiply by 4 as we run on 4 GPUs with romeo
+batch_size = 128*4 # Multiply by 4 as we run on 4 GPUs
 train_dataloader = getOverSampler(train_files, mask_as_int, batch_size)
-val_dataloader = getOverSampler(val_files, mask_as_int, batch_size, remove_zeros = False)
+val_dataloader = getOverSampler(val_files, mask_as_int, batch_size)
 test_dataloader = DataLoader(LabelDataset(test_files, mask_as_int), batch_size=batch_size, shuffle=True, num_workers=16)
 
 # Define the model
@@ -153,7 +150,7 @@ x = model.to(device)
 
 # LOSS, OPTIMIZER
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
 
 
 # MODEL PERF
@@ -169,8 +166,8 @@ early_stop_limit = 15
 model.train()
 for epoch in range(1, n_epochs+1):
     if early_stop > early_stop_limit:
-        print(f'Early Stopping detected after {early_stop_limit} epochs without improvements on validation loss. Retrieving previous best model')
-        model.load_state_dict(torch.load('resnet50-1024.pt'))
+        print(f'Early Stopping detected after {early_stop_limit} epochs without improvmements on validation loss. Retrieving previous best model')
+        #model.load_state_dict(torch.load('resnet_tcga.pt'))
         break
     print(f'Epoch {epoch}/{n_epochs}')
     # Train for an epoch
@@ -186,7 +183,7 @@ for epoch in range(1, n_epochs+1):
         if val_loss < valid_loss_min:
             early_stop = 0
             valid_loss_min = val_loss
-            torch.save(model.state_dict(), './output/resnet_101_1024_tcga.pt')
+            torch.save(model.state_dict(), './output/resnet_50_1024_tcga.pt')
             print('validation loss improved, saving model')
         else:
             early_stop += 1

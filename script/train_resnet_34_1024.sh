@@ -4,11 +4,11 @@
 
 #SBATCH -p short
 #SBATCH --time=06:00:00   # walltime
-#SBATCH --ntasks=16   # number of processor cores (i.e. tasks)
+#SBATCH --ntasks=4  # number of processor cores (i.e. tasks)
 #SBATCH --nodes=1   # number of nodes
 #SBATCH --gres=gpu:4
 #SBATCH -J "test-resnet34-1024"   # job name
-#SBATCH --mail-user=felix.wirth@epita.fr   # email address
+#SBATCH --mail-user=antoine.vergnaud@epita.fr   # email address
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 
@@ -17,5 +17,4 @@
 
 
 echo Job starting
-cd data
 python3.8 train_script_resnet34_1024.py
