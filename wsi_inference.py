@@ -9,7 +9,7 @@ model = models.resnet50()
 model.fc = nn.Linear(model.fc.in_features, 3)
 
 weights = # Specify your weights 
-model.load_state_dict(torch.load(weights, map_location='cpu'))
+model.load_state_dict(torch.load(weights, map_location='cpu'), strict = False)
 
 slide_path = # Specify the slide path
 
